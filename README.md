@@ -35,13 +35,29 @@ MIMIC-IV demo (CSV.gz)
 
 ```bash
 make setup     # dependances, .env, hooks git
-# renseigner MISTRAL_API_KEY dans .env
+# renseigner MISTRAL_API_KEY dans .env (MISTRAL_MODEL : codestral-latest par defaut)
 make data      # telecharge MIMIC-IV demo 2.2 et inventorie les colonnes
-make build     # reconstruit le warehouse DuckDB
-make serve     # API sur :8000, interface sur :8501
+make serve     # docker compose : build du warehouse, API sur :8000, interface sur :8501
 ```
 
-`make help` liste toutes les cibles.
+Sans Docker : `make build` (warehouse et catalogue dbt), puis `make api` et `make app`
+dans deux terminaux. `make help` liste toutes les cibles.
+
+### Docker
+
+| Service | Role | Port |
+|---|---|---|
+| `dbt` | one-shot : reconstruit `data/warehouse/anamnese.duckdb` et le catalogue, puis s'arrete | — |
+| `api` | FastAPI, lit `data/` en lecture seule | `ANAMNESE_API_PORT` (8000) |
+| `app` | Streamlit, ne parle qu'a l'API | `ANAMNESE_APP_PORT` (8501) |
+
+Un port deja pris sur l'hote se change dans `.env` (`ANAMNESE_API_PORT=8010`).
+
+Reconstruire le warehouse pendant que l'API tourne : `docker compose run --rm dbt`.
+Le build se fait dans un fichier a part, bascule par un rename atomique : l'API
+voit les nouvelles donnees a la requete suivante, sans redemarrage. Un mart
+**ajoute ou modifie dans sa structure** demande en revanche
+`docker compose restart api`, qui ne relit le catalogue qu'au demarrage.
 
 ## Developpement
 
