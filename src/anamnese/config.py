@@ -31,7 +31,13 @@ class Settings(BaseSettings):
     duckdb_path: Path = Field(
         default=Path("data/warehouse/anamnese.duckdb"), validation_alias="ANAMNESE_DUCKDB_PATH"
     )
+    dbt_target_path: Path = Field(
+        default=Path("transform/target"), validation_alias="ANAMNESE_DBT_TARGET_PATH"
+    )
     max_rows: int = Field(default=1000, gt=0, validation_alias="ANAMNESE_MAX_ROWS")
+    query_timeout_seconds: float = Field(
+        default=10.0, gt=0, validation_alias="ANAMNESE_QUERY_TIMEOUT_SECONDS"
+    )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias="ANAMNESE_LOG_LEVEL"
     )
