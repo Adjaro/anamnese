@@ -1,0 +1,45 @@
+# Nomenclature SQL des modeles dbt : CLAUDE.md §10, section « SQL et dbt ».
+[sqlfluff]
+dialect = duckdb
+# Templater jinja avec les builtins dbt simules (ref, source, config) :
+# le lint ne depend ni d'un warehouse, ni d'un `dbt parse` prealable.
+templater = jinja
+max_line_length = 100
+exclude_rules = structure.column_order
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = True
+
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 4
+
+# Virgule en tete de ligne dans les listes de colonnes.
+[sqlfluff:layout:type:comma]
+line_position = leading
+
+# Mots-cles, fonctions, litteraux et identifiants en minuscules.
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.identifiers]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.types]
+extended_capitalisation_policy = lower
+
+# Alias explicites, jamais d'une seule lettre.
+[sqlfluff:rules:aliasing.table]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.column]
+aliasing = explicit
+
+[sqlfluff:rules:aliasing.length]
+min_alias_length = 2

@@ -1,0 +1,150 @@
+# Portes de qualite locales : CLAUDE.md §11.
+# Installees par `make hooks` pour les etapes pre-commit, commit-msg et pre-push.
+# Les outils Python passent par `uv run` : memes versions que le lockfile et la CI.
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+exclude: ^(data/|\.venv/|transform/(target|logs|dbt_packages)/)
+
+repos:
+  # ------------------------------------------------------------------------- #
+  # Hygiene generale
+  # ------------------------------------------------------------------------- #
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: no-commit-to-branch
+        args: [--branch, main]
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+        # Les fichiers dbt utilisent du jinja ; yamllint les couvre.
+        exclude: ^transform/
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+        exclude: ^uv\.lock$
+      - id: detect-private-key
+
+  # ------------------------------------------------------------------------- #
+  # Fichiers interdits : CLAUDE.md §2 et §10
+  # ------------------------------------------------------------------------- #
+  - repo: local
+    hooks:
+      - id: fichiers-de-donnees
+        name: aucun fichier de donnees ni secret versionne
+        language: fail
+        entry: "interdit (CLAUDE.md §2) : donnees, warehouse, .env ou artefact de build"
+        files: >-
+          (?x)^(
+            data/.*
+            | (.*/)?\.env
+            | .*\.(duckdb|wal|csv|csv\.gz|parquet|ipynb)
+            | transform/(target|logs)/.*
+            | eval/reports/.*
+          )$
+      - id: noms-fourre-tout
+        name: aucun nom de fichier fourre-tout ni suffixe de version
+        language: fail
+        entry: "nom interdit (CLAUDE.md §10) : renommer par ce que fait le fichier"
+        files: >-
+          (?x)(^|/)(
+            (utils?|helpers?|common|misc|tools|temp|tmp|test2|final|new)\.py
+            | [^/]*_v[0-9]+\.(py|sql)
+          )$
+
+  # ------------------------------------------------------------------------- #
+  # Secrets : detect-secrets en local, gitleaks en CI
+  # ------------------------------------------------------------------------- #
+  - repo: local
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets
+        language: system
+        entry: uv run detect-secrets-hook --baseline .secrets.baseline
+        exclude: ^(uv\.lock|\.secrets\.baseline)$
+
+  # ------------------------------------------------------------------------- #
+  # Lint et format
+  # ------------------------------------------------------------------------- #
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        language: system
+        entry: uv run ruff check --fix --force-exclude
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run ruff format --force-exclude
+        types_or: [python, pyi]
+      - id: sqlfluff
+        name: sqlfluff lint
+        language: system
+        entry: uv run sqlfluff lint
+        files: ^transform/models/.*\.sql$
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict, -c, .yamllint.yml]
+
+  # ------------------------------------------------------------------------- #
+  # Message de commit : Conventional Commits, 72 caracteres
+  # ------------------------------------------------------------------------- #
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - --strict
+          - --scopes=dbt,guardrails,engine,api,app,eval,docker,data
+          - feat
+          - fix
+          - docs
+          - test
+          - refactor
+          - chore
+          - perf
+          - build
+          - ci
+          - revert
+
+  - repo: local
+    hooks:
+      # conventional-pre-commit tolere une majuscule et un point final :
+      # ce hook impose la forme exacte de CLAUDE.md §11.
+      - id: forme-du-sujet
+        name: sujet en minuscules, sans point final, 72 caracteres maximum
+        language: pygrep
+        entry: '\A(?=[^\n]{1,72}\n)[a-z]+(\([a-z]+\))?!?: [^A-Z\s][^\n]*(?<!\.)\n'
+        args: [--multiline, --negate]
+        stages: [commit-msg]
+
+  # ------------------------------------------------------------------------- #
+  # Pre-push : tests et parsing dbt
+  # ------------------------------------------------------------------------- #
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest (hors LLM et warehouse)
+        language: system
+        entry: uv run pytest -q -m "not needs_llm and not needs_warehouse"
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: dbt-parse
+        name: dbt parse
+        language: system
+        # Le projet dbt n'existe qu'a partir de l'etape 2 de PLAN.md.
+        entry: >-
+          bash -c 'test ! -f transform/dbt_project.yml
+          || uv run --group dbt dbt parse --project-dir transform --profiles-dir transform'
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
