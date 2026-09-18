@@ -1,0 +1,78 @@
+# Portes de qualite distantes : CLAUDE.md §11.
+# Les noms de jobs (secrets, quality, hygiene) sont ceux exiges par la
+# protection de `main` : ne pas les renommer sans mettre la regle a jour.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Dependances
+        run: uv sync --locked --all-groups
+      - name: Hooks pre-commit sur tout le depot
+        # no-commit-to-branch n'a pas de sens en CI : il echouerait sur main.
+        run: SKIP=no-commit-to-branch uv run pre-commit run --all-files --show-diff-on-failure
+      - name: Tests
+        run: uv run pytest -m "not needs_llm and not needs_warehouse" --cov=anamnese
+      - name: dbt parse
+        if: hashFiles('transform/dbt_project.yml') != ''
+        run: uv run --group dbt dbt parse --project-dir transform --profiles-dir transform
+
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Aucun fichier interdit versionne
+        run: |
+          interdits=$(git ls-files | grep -E \
+            -e '^data/' \
+            -e '(^|/)\.env$' \
+            -e '\.(duckdb|wal|csv|parquet|ipynb)$' \
+            -e '\.csv\.gz$' \
+            -e '^transform/(target|logs|dbt_packages)/' \
+            -e '^eval/reports/' \
+            || true)
+          if [ -n "$interdits" ]; then
+            echo "::error::fichiers interdits versionnes (CLAUDE.md §11)"
+            echo "$interdits"
+            exit 1
+          fi
+      - name: .env.example present et sans valeur de secret
+        run: |
+          test -f .env.example
+          if grep -E '^MISTRAL_API_KEY=.+' .env.example; then
+            echo "::error::MISTRAL_API_KEY doit rester vide dans .env.example"
+            exit 1
+          fi

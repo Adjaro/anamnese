@@ -1,0 +1,123 @@
+[project]
+name = "anamnese"
+version = "0.1.0"
+description = "NL2SQL sur MIMIC-IV demo : dbt + DuckDB + Mistral, derriere des garde-fous SQL."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Edina ADJARO PATOUSSI" }]
+
+# Runtime strict : ce que les services `api` et `app` ont besoin d'importer.
+# dbt n'est PAS ici : il vit dans le groupe `dbt`, car seul le service de build
+# en depend et il contraint fortement la resolution de dependances.
+dependencies = [
+    "duckdb>=1.1",
+    "sqlglot>=25.0",
+    "mistralai>=1.2",
+    "pydantic-settings>=2.5",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "streamlit>=1.39",
+    "httpx>=0.27",
+    "pandas>=2.2",
+    "pyyaml>=6.0",
+    "structlog>=24.4",
+]
+
+[project.scripts]
+anamnese = "anamnese.engine:main"
+
+[dependency-groups]
+# Transformation : isole pour que l'image `api` reste legere et que les
+# contraintes de dbt ne remontent pas dans le runtime.
+dbt = [
+    "dbt-core>=1.12,<1.13",
+    "dbt-duckdb>=1.9,<1.10",
+]
+# Outillage de developpement et CI.
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.7",
+    "pre-commit>=4.0",
+    "sqlfluff>=3.2",
+    "tqdm>=4.66",
+    "requests>=2.32",
+    "detect-secrets>=1.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/anamnese"]
+
+# --------------------------------------------------------------------------- #
+# Ruff — lint + format. Une seule source de verite, pas de black ni d'isort.
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts", "eval", "app"]
+extend-exclude = ["transform/target", "transform/dbt_packages", "data"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",     # pycodestyle
+    "F",          # pyflakes
+    "I",          # isort
+    "N",          # pep8-naming
+    "UP",         # pyupgrade
+    "B",          # bugbear
+    "A",          # builtins shadowing
+    "C4",         # comprehensions
+    "DTZ",        # datetimes naives
+    "T20",        # print() hors scripts
+    "SIM",        # simplifications
+    "PTH",        # pathlib plutot que os.path
+    "RUF",
+    "S",          # bandit : securite
+    "ARG",        # arguments inutilises
+    "TRY",        # anti-patterns d'exceptions
+]
+ignore = [
+    "TRY003",     # messages d'exception longs : on les veut explicites
+    "S101",       # assert : legitime dans les tests (affine plus bas)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Les scripts et l'eval parlent a un humain via stdout : print() autorise.
+"scripts/*" = ["T20"]
+"eval/*" = ["T20"]
+"app/*" = ["T20"]
+"src/anamnese/engine.py" = ["T20"]   # uniquement dans le bloc CLI
+"tests/*" = ["S101", "ARG", "PLR2004"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["anamnese"]
+
+[tool.ruff.lint.flake8-builtins]
+builtins-allowed-modules = ["config"]
+
+[tool.ruff.format]
+quote-style = "double"
+line-ending = "lf"
+
+# --------------------------------------------------------------------------- #
+# Pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+# La couverture est mesuree en CI (`--cov=anamnese`), pas a chaque run local :
+# elle n'a aucun sens tant que le package est vide et elle bruite la sortie.
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+    "guardrails: tests de securite des garde-fous SQL (bloquants)",
+    "needs_warehouse: necessite data/warehouse/anamnese.duckdb",
+    "needs_llm: consomme des credits Mistral, exclu de la CI",
+]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]

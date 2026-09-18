@@ -1,0 +1,6 @@
+# Toute modification demande une revue du proprietaire.
+*                              @Adjaro
+
+# Seul module ou un bug est une faille (CLAUDE.md §3) : revue explicite.
+/src/anamnese/guardrails.py    @Adjaro
+/tests/test_guardrails.py      @Adjaro

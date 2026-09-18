@@ -1,0 +1,13 @@
+
+# <type>(<scope>): <description a l'imperatif, minuscule, sans point final>
+# |<-------------- 72 caracteres maximum sur la ligne de sujet -------->|
+#
+# Types  : feat fix docs test refactor chore perf build ci revert
+# Scopes : dbt guardrails engine api app eval docker data
+#          (facultatif pour un changement transverse : outillage, CI)
+#
+# Corps : explique POURQUOI, jamais QUOI. Le diff dit deja quoi.
+#
+# Pied de page, des qu'un contrat change (schema d'un mart, reponse d'API,
+# nom d'une variable d'environnement) :
+# BREAKING CHANGE: <description du contrat modifie>
