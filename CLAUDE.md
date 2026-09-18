@@ -20,8 +20,9 @@ DuckDB exécute en lecture seule derrière des garde-fous.
 | Exécution     | Docker Compose             | installation hôte                             |
 
 Le modèle Mistral n'est **jamais** codé en dur : il vient de `MISTRAL_MODEL`
-(défaut `mistral-small-latest`). Le code doit fonctionner à l'identique avec
-`ministral-3b-latest` ou `mistral-large-latest`.
+(défaut `codestral-latest`, choisi par `make eval` : 97 % contre 90 % pour
+`ministral-14b-latest`, voir PR de l'étape 6). Le code doit fonctionner à
+l'identique avec n'importe quel modèle Mistral de chat.
 
 Avant d'ajouter une dépendance non listée dans `pyproject.toml` : demander.
 

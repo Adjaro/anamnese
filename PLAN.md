@@ -135,8 +135,9 @@ plausible, vérifié à la main.
 **Sortie :** `make eval` produit un rapport. Note le taux de référence — c'est
 ton point de comparaison pour tout changement ultérieur.
 
-Lance ensuite l'éval avec `ministral-3b-latest`, `mistral-small-latest` et
-`mistral-large-latest`. Le tableau des trois taux décide du modèle, pas l'intuition.
+Lance ensuite l'éval sur les modèles accessibles au forfait (`mistral-small` et
+`mistral-large` ne l'étaient pas : `codestral`, `ministral-3b`, `-8b`, `-14b`).
+Le tableau des taux décide du modèle, pas l'intuition.
 
 ---
 
