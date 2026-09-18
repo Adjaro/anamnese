@@ -91,7 +91,7 @@ anamnese/
 ├── docker-compose.yml  docker/{api.Dockerfile,dbt.Dockerfile,app.Dockerfile}
 ├── data/                    # gitignored en entier, créé par les scripts
 │   ├── raw/                 # CSV.gz PhysioNet, en lecture seule
-│   └── warehouse/           # anamnese.duckdb
+│   └── warehouse/           # anamnese.duckdb, .build/ pendant un build
 ├── scripts/download_mimic.py  scripts/swap_warehouse.py
 ├── transform/               # projet dbt isolé
 │   ├── dbt_project.yml  profiles.yml  packages.yml
@@ -168,9 +168,11 @@ est considérée comme un défaut à corriger.
 
 - **Un seul écrivain.** dbt écrit, l'API lit. Les deux ne doivent jamais ouvrir
   le fichier en écriture simultanément.
-- Le build écrit dans `anamnese.duckdb.tmp`, puis `os.replace()` vers
-  `anamnese.duckdb` — un rename atomique. C'est le rôle de
-  `scripts/swap_warehouse.py`.
+- Le build écrit dans `data/warehouse/.build/anamnese.duckdb`, puis
+  `os.replace()` vers `anamnese.duckdb` — un rename atomique. C'est le rôle de
+  `scripts/swap_warehouse.py`. Le fichier temporaire garde le nom
+  `anamnese.duckdb` : dbt-duckdb exige que le nom du catalogue corresponde au
+  nom de fichier, un suffixe `.tmp` casse le build.
 - L'API ouvre le fichier en `read_only`. Si le fichier est absent, elle démarre
   quand même et renvoie une erreur explicite sur `/ask`, sans planter.
 - Les CSV sont lus via `read_csv_auto` avec les types déclarés explicitement
