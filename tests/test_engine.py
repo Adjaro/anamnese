@@ -119,6 +119,20 @@ def test_leve_une_question_error_quand_le_llm_ne_peut_pas_repondre() -> None:
         moteur.ask("Combien a coute le sejour ?")
 
 
+@pytest.mark.parametrize(
+    "reponse",
+    [
+        "```sql\nCANNOT_ANSWER: aucune donnee sur les medecins\n```",
+        "Je ne peux pas.\nCANNOT_ANSWER: aucune donnee sur les medecins",
+        "-- CANNOT_ANSWER: aucune donnee sur les medecins",
+    ],
+)
+def test_reconnait_un_refus_ecrit_dans_un_bloc_de_code_ou_apres_du_texte(reponse: str) -> None:
+    moteur = Engine(Settings(), FauxLLM(reponse), CATALOGUE_MINIMAL)
+    with pytest.raises(QuestionError, match=r"^aucune donnee sur les medecins$"):
+        moteur.ask("Quel medecin a traite le plus de patients ?")
+
+
 def test_signale_un_warehouse_absent_sans_relancer() -> None:
     llm = FauxLLM("select count(*) from dim_patient")
     moteur = Engine(

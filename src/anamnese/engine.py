@@ -10,6 +10,7 @@ seuls le schema, la question et des messages d'erreur sans valeur (CLAUDE.md §2
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import threading
 import time
@@ -28,7 +29,9 @@ from anamnese.llm import ClientLLM, ClientMistral, LLMError, Message, extract_sq
 
 MAX_RELANCES = 2
 LONGUEUR_MAX_QUESTION = 1000
-MARQUEUR_SANS_REPONSE = "CANNOT_ANSWER:"
+# Le modele signale une question sans reponse ; il l'ecrit parfois dans un bloc
+# de code ou apres une phrase, d'ou une recherche dans toute la reponse.
+MOTIF_SANS_REPONSE = re.compile(r"CANNOT_ANSWER:[ \t]*([^\n`]*)")
 MARQUEUR_SCHEMA = "{{schema}}"
 
 # Erreurs DuckDB qui ne decrivent que le schema ou la syntaxe : leur message peut
@@ -150,8 +153,9 @@ class Engine:
             reponse = self._client.complete(messages)
             tokens_prompt += reponse.tokens_prompt
             tokens_reponse += reponse.tokens_reponse
-            if reponse.texte.strip().startswith(MARQUEUR_SANS_REPONSE):
-                raison = reponse.texte.strip().removeprefix(MARQUEUR_SANS_REPONSE).strip()
+            sans_reponse = MOTIF_SANS_REPONSE.search(reponse.texte)
+            if sans_reponse:
+                raison = sans_reponse.group(1).strip()
                 logger.info("question_sans_reponse", question=question, raison=raison)
                 raise QuestionError(raison or "question sans reponse possible")
 

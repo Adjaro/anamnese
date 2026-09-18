@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     mistral_api_key: SecretStr | None = Field(default=None, validation_alias="MISTRAL_API_KEY")
     mistral_model: str = Field(
-        default="mistral-small-latest", min_length=1, validation_alias="MISTRAL_MODEL"
+        default="codestral-latest", min_length=1, validation_alias="MISTRAL_MODEL"
     )
     duckdb_path: Path = Field(
         default=Path("data/warehouse/anamnese.duckdb"), validation_alias="ANAMNESE_DUCKDB_PATH"

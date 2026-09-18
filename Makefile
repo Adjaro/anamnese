@@ -67,7 +67,7 @@ test: ## Tests (hors LLM) ; ceux du warehouse s'ignorent s'il n'est pas construi
 check: lint test ## Porte de sortie locale : ce que la CI verifiera
 
 eval: ## Rejoue le jeu d'evaluation NL2SQL et ecrit un rapport
-	$(PY) python eval/run_eval.py
+	$(PY) python eval/run_eval.py $(EVAL_ARGS)
 
 # --------------------------------------------------------------------------- #
 # Execution
