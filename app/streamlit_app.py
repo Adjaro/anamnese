@@ -50,7 +50,7 @@ def _afficher(reponse: dict[str, Any], cle: str) -> None:
         f"{reponse['modele']} · {reponse['tentatives']} tentative(s)"
     )
     with st.expander("SQL généré"):
-        st.code(reponse["sql"], language="sql")
+        st.code(reponse["sql"], language="sql", wrap_lines=True)
     tableau = pd.DataFrame(reponse["lignes"], columns=reponse["colonnes"])
     st.dataframe(tableau, width="stretch", hide_index=True)
     st.download_button(

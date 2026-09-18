@@ -18,4 +18,5 @@ COPY app app
 USER 1000:1000
 EXPOSE 8501
 CMD ["streamlit", "run", "app/streamlit_app.py", \
-     "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]
+     "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true", \
+     "--client.toolbarMode=minimal"]
