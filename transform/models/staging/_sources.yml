@@ -1,0 +1,186 @@
+# Sources MIMIC-IV demo 2.2, lues directement dans les CSV.gz de data/raw/.
+#
+# Les types sont declares ici, une seule fois, et jamais inferes (CLAUDE.md §7) :
+# `colonnes` alimente l'argument `columns` de read_csv, avec auto_detect desactive.
+# Reference : data/raw/_inventory.md. Ecarts volontaires avec l'inference :
+#   - labevents.value et chartevents.value restent VARCHAR (valeurs « <0.1 », etc.) ;
+#   - d_items.lownormalvalue est DOUBLE, comme highnormalvalue, bien que la demo
+#     ne contienne que des entiers ;
+#   - petits entiers (age, annee, rang, version CIM, drapeaux) en INTEGER.
+version: 2
+
+sources:
+  - name: hosp
+    description: >-
+      Module hosp de MIMIC-IV demo 2.2 : dossier hospitalier de 100 patients.
+      Dates decalees dans le futur par la desidentification.
+    config:
+      meta:
+        raw_path: "{{ var('raw_path') }}"
+        external_location: >-
+          read_csv('{raw_path}/hosp/{name}.csv.gz', header = true, auto_detect = false,
+          columns = {colonnes})
+    tables:
+      - name: patients
+        description: Une ligne par patient.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              gender: VARCHAR
+              anchor_age: INTEGER
+              anchor_year: INTEGER
+              anchor_year_group: VARCHAR
+              dod: DATE
+
+      - name: admissions
+        description: Une ligne par sejour hospitalier.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              admittime: TIMESTAMP
+              dischtime: TIMESTAMP
+              deathtime: TIMESTAMP
+              admission_type: VARCHAR
+              admit_provider_id: VARCHAR
+              admission_location: VARCHAR
+              discharge_location: VARCHAR
+              insurance: VARCHAR
+              language: VARCHAR
+              marital_status: VARCHAR
+              race: VARCHAR
+              edregtime: TIMESTAMP
+              edouttime: TIMESTAMP
+              hospital_expire_flag: INTEGER
+
+      - name: diagnoses_icd
+        description: Une ligne par diagnostic code d'un sejour hospitalier.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              seq_num: INTEGER
+              icd_code: VARCHAR
+              icd_version: INTEGER
+
+      - name: d_icd_diagnoses
+        description: Referentiel des codes diagnostiques CIM-9 et CIM-10.
+        config:
+          meta:
+            colonnes:
+              icd_code: VARCHAR
+              icd_version: INTEGER
+              long_title: VARCHAR
+
+      - name: procedures_icd
+        description: Une ligne par acte code d'un sejour hospitalier.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              seq_num: INTEGER
+              chartdate: DATE
+              icd_code: VARCHAR
+              icd_version: INTEGER
+
+      - name: d_icd_procedures
+        description: Referentiel des codes d'actes CIM-9 et CIM-10.
+        config:
+          meta:
+            colonnes:
+              icd_code: VARCHAR
+              icd_version: INTEGER
+              long_title: VARCHAR
+
+      - name: labevents
+        description: Une ligne par resultat d'analyse de laboratoire.
+        config:
+          meta:
+            colonnes:
+              labevent_id: BIGINT
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              specimen_id: BIGINT
+              itemid: BIGINT
+              order_provider_id: VARCHAR
+              charttime: TIMESTAMP
+              storetime: TIMESTAMP
+              value: VARCHAR
+              valuenum: DOUBLE
+              valueuom: VARCHAR
+              ref_range_lower: DOUBLE
+              ref_range_upper: DOUBLE
+              flag: VARCHAR
+              priority: VARCHAR
+              comments: VARCHAR
+
+      - name: d_labitems
+        description: Referentiel des analyses de laboratoire.
+        config:
+          meta:
+            colonnes:
+              itemid: BIGINT
+              label: VARCHAR
+              fluid: VARCHAR
+              category: VARCHAR
+
+  - name: icu
+    description: >-
+      Module icu de MIMIC-IV demo 2.2 : sejours en reanimation.
+      Dates decalees dans le futur par la desidentification.
+    config:
+      meta:
+        raw_path: "{{ var('raw_path') }}"
+        external_location: >-
+          read_csv('{raw_path}/icu/{name}.csv.gz', header = true, auto_detect = false,
+          columns = {colonnes})
+    tables:
+      - name: icustays
+        description: Une ligne par sejour en reanimation.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              stay_id: BIGINT
+              first_careunit: VARCHAR
+              last_careunit: VARCHAR
+              intime: TIMESTAMP
+              outtime: TIMESTAMP
+              los: DOUBLE
+
+      - name: chartevents
+        description: Une ligne par mesure saisie au lit du patient en reanimation.
+        config:
+          meta:
+            colonnes:
+              subject_id: BIGINT
+              hadm_id: BIGINT
+              stay_id: BIGINT
+              caregiver_id: BIGINT
+              charttime: TIMESTAMP
+              storetime: TIMESTAMP
+              itemid: BIGINT
+              value: VARCHAR
+              valuenum: DOUBLE
+              valueuom: VARCHAR
+              warning: INTEGER
+
+      - name: d_items
+        description: Referentiel des elements mesures en reanimation.
+        config:
+          meta:
+            colonnes:
+              itemid: BIGINT
+              label: VARCHAR
+              abbreviation: VARCHAR
+              linksto: VARCHAR
+              category: VARCHAR
+              unitname: VARCHAR
+              param_type: VARCHAR
+              lownormalvalue: DOUBLE
+              highnormalvalue: DOUBLE

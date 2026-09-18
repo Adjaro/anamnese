@@ -1,0 +1,10 @@
+# Profil unique, versionne : aucun secret, le chemin seul varie selon l'environnement.
+anamnese:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # Relatif a `transform/`. Le build atomique (scripts/swap_warehouse.py) et le
+      # conteneur dbt surchargent ce chemin par ANAMNESE_DBT_DUCKDB_PATH.
+      path: "{{ env_var('ANAMNESE_DBT_DUCKDB_PATH', '../data/warehouse/anamnese.duckdb') }}"
+      threads: 4

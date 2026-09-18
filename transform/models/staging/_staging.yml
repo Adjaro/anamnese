@@ -1,0 +1,142 @@
+# Vues de staging : une par table source, noms d'origine conserves (CLAUDE.md §10),
+# types garantis par _sources.yml. Les descriptions destinees au LLM vivent dans
+# les marts ; ici, granularite et tests d'integrite des cles.
+version: 2
+
+models:
+  - name: stg_hosp__patients
+    description: Une ligne par patient.
+    columns:
+      - name: subject_id
+        data_tests: [unique, not_null]
+
+  - name: stg_hosp__admissions
+    description: Une ligne par sejour hospitalier.
+    columns:
+      - name: hadm_id
+        data_tests: [unique, not_null]
+      - name: subject_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hosp__patients')
+                field: subject_id
+
+  - name: stg_hosp__diagnoses_icd
+    description: >-
+      Une ligne par diagnostic d'un sejour hospitalier, identifiee par
+      (hadm_id, seq_num). seq_num = 1 pour le diagnostic principal.
+    data_tests:
+      - unique:
+          column_name: "hadm_id || '-' || seq_num"
+    columns:
+      - name: hadm_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hosp__admissions')
+                field: hadm_id
+      - name: icd_code
+        data_tests: [not_null]
+      - name: icd_version
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [9, 10]
+                quote: false
+
+  - name: stg_hosp__d_icd_diagnoses
+    description: >-
+      Une ligne par code diagnostique, identifie par (icd_code, icd_version) :
+      un meme icd_code peut exister en CIM-9 et en CIM-10.
+    data_tests:
+      - unique:
+          column_name: "icd_code || '-' || icd_version"
+
+  - name: stg_hosp__procedures_icd
+    description: >-
+      Une ligne par acte d'un sejour hospitalier, identifiee par (hadm_id, seq_num).
+    data_tests:
+      - unique:
+          column_name: "hadm_id || '-' || seq_num"
+    columns:
+      - name: hadm_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hosp__admissions')
+                field: hadm_id
+      - name: icd_version
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [9, 10]
+                quote: false
+
+  - name: stg_hosp__d_icd_procedures
+    description: >-
+      Une ligne par code d'acte, identifie par (icd_code, icd_version).
+    data_tests:
+      - unique:
+          column_name: "icd_code || '-' || icd_version"
+
+  - name: stg_hosp__labevents
+    description: Une ligne par resultat d'analyse de laboratoire.
+    columns:
+      - name: labevent_id
+        data_tests: [unique, not_null]
+      - name: itemid
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hosp__d_labitems')
+                field: itemid
+
+  - name: stg_hosp__d_labitems
+    description: Une ligne par analyse de laboratoire.
+    columns:
+      - name: itemid
+        data_tests: [unique, not_null]
+
+  - name: stg_icu__icustays
+    description: Une ligne par sejour en reanimation.
+    columns:
+      - name: stay_id
+        data_tests: [unique, not_null]
+      - name: hadm_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_hosp__admissions')
+                field: hadm_id
+
+  - name: stg_icu__chartevents
+    description: Une ligne par mesure saisie au lit du patient en reanimation.
+    columns:
+      - name: stay_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_icu__icustays')
+                field: stay_id
+      - name: itemid
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_icu__d_items')
+                field: itemid
+
+  - name: stg_icu__d_items
+    description: Une ligne par element mesure en reanimation.
+    columns:
+      - name: itemid
+        data_tests: [unique, not_null]

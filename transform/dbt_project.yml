@@ -1,0 +1,24 @@
+# Projet dbt isole : construit et documente les marts lus par le moteur NL2SQL.
+# CLAUDE.md §5 pour les conventions de couches, §7 pour les contraintes DuckDB.
+name: anamnese
+version: "0.1.0"
+profile: anamnese
+
+model-paths: ["models"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+vars:
+  # Dossier des CSV.gz PhysioNet, relatif au dossier `transform/` depuis lequel
+  # dbt s'execute. Surcharge en conteneur : --vars '{raw_path: /data/raw}'.
+  raw_path: ../data/raw
+
+models:
+  anamnese:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table
