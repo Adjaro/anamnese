@@ -323,7 +323,8 @@ régression bloque l'étape.
 - Types : `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`, `build`,
   `ci`, `revert`.
 - Scopes : `dbt`, `guardrails`, `engine`, `api`, `app`, `eval`, `docker`,
-  `data`.
+  `data`. Le scope est omis pour un changement transverse qui ne relève
+  d'aucun d'eux (outillage, CI) : `ci: ajoute le job hygiene`.
   Exemple : `feat(dbt): ajoute fct_icu_stay et ses tests de relation`.
 - Un commit = un changement cohérent. Un commit qui touche à la fois un modèle
   dbt, le prompt et le Dockerfile est à scinder.
@@ -424,5 +425,9 @@ et ses contraintes de version ne doivent pas remonter dans le runtime.
 - Signaler tout écart avec ces règles plutôt que de le contourner
   silencieusement. Si une règle bloque, le dire et proposer, ne pas la
   réinterpréter.
-- Ne pas commiter ni pousser. Proposer le message de commit au format §11 et
-  laisser l'humain décider.
+- Commiter est autorisé, dans le cadre de §11 : sur une branche
+  `<type>/<description>`, jamais sur `main`, hooks actifs, jamais de
+  `--no-verify`. Un commit par changement cohérent, message passé par fichier
+  (`git commit -F`) avec un corps qui explique pourquoi.
+- Ne jamais pousser, ouvrir de PR, fusionner, ni réécrire un historique déjà
+  poussé sans demande explicite de l'humain pour cette action précise.
