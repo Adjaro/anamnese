@@ -16,9 +16,21 @@ import httpx
 from mistralai.client import Mistral
 from mistralai.client.errors import NoResponseError
 from mistralai.client.errors.mistralerror import MistralError
+from mistralai.client.utils import BackoffStrategy, RetryConfig
 
 TIMEOUT_MS = 30_000
 TEMPERATURE = 0.0
+
+# 429 et 5xx sont souvent passagers (limite de debit du compte) : le SDK
+# reessaie avec un delai croissant, ou celui impose par l'en-tete Retry-After,
+# pendant 30 s au plus avant de lever l'erreur.
+RELANCES_HTTP = RetryConfig(
+    strategy="backoff",
+    backoff=BackoffStrategy(
+        initial_interval=1_000, max_interval=10_000, exponent=2.0, max_elapsed_time=30_000
+    ),
+    retry_connection_errors=True,
+)
 
 # Premier bloc ```sql ... ``` (ou ``` ... ```) de la reponse.
 MOTIF_BLOC_SQL = re.compile(r"```(?:sql|duckdb)?[ \t]*\n(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -57,7 +69,7 @@ class ClientMistral:
         if not api_key:
             raise LLMError("MISTRAL_API_KEY absente : la renseigner dans .env")
         self.modele = modele
-        self._client = Mistral(api_key=api_key, timeout_ms=TIMEOUT_MS)
+        self._client = Mistral(api_key=api_key, timeout_ms=TIMEOUT_MS, retry_config=RELANCES_HTTP)
 
     def complete(self, messages: list[Message]) -> ReponseLLM:
         try:

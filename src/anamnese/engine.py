@@ -208,6 +208,8 @@ class Engine:
 def configure_logging(niveau: str) -> None:
     """Logs JSON sur la sortie d'erreur : question, SQL, verdict, duree. Jamais de lignes."""
     logging.basicConfig(level=niveau, stream=sys.stderr, format="%(message)s")
+    # httpx journalise chaque requete en INFO : du bruit hors du format JSON.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     structlog.configure(
         processors=[
             structlog.processors.add_log_level,
