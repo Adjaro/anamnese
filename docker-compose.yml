@@ -1,0 +1,60 @@
+# anamnese : trois services autour d'un volume partage ./data (CLAUDE.md §8).
+#
+#   docker compose up --build        # build du warehouse, puis API et interface
+#   docker compose run --rm dbt      # reconstruit le warehouse, API en marche
+#
+# Prerequis : `make data` (CSV dans data/raw) et un .env (`make setup`).
+name: anamnese
+
+services:
+  dbt:
+    build:
+      context: .
+      dockerfile: docker/dbt.Dockerfile
+    image: anamnese/dbt:0.1.0
+    # Proprietaire des fichiers ecrits dans ./data : l'utilisateur de l'hote.
+    user: "${ANAMNESE_UID:-1000}:${ANAMNESE_GID:-1000}"
+    environment:
+      # Manifest et catalogue dans le volume partage, pour que l'API les lise.
+      DBT_TARGET_PATH: /app/data/dbt_target
+    volumes:
+      - ./data:/app/data
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    image: anamnese/api:0.1.0
+    env_file: .env
+    environment:
+      ANAMNESE_DUCKDB_PATH: /app/data/warehouse/anamnese.duckdb
+      ANAMNESE_DBT_TARGET_PATH: /app/data/dbt_target
+    volumes:
+      - ./data:/app/data:ro
+    ports:
+      - "${ANAMNESE_API_PORT:-8000}:8000"
+    depends_on:
+      dbt:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: anamnese/app:0.1.0
+    environment:
+      ANAMNESE_API_URL: http://api:8000
+    ports:
+      - "${ANAMNESE_APP_PORT:-8501}:8501"
+    depends_on:
+      api:
+        condition: service_healthy

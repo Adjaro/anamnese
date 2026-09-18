@@ -42,12 +42,11 @@ def _supprimer_temporaire() -> None:
     _chemin_wal(WAREHOUSE_TEMPORAIRE).unlink(missing_ok=True)
 
 
-def _construire_temporaire() -> None:
-    """Lance `dbt build` vers le fichier temporaire ; leve si un modele ou un test echoue."""
+def _lancer_dbt(*sous_commande: str) -> None:
     environnement = os.environ | {"ANAMNESE_DBT_DUCKDB_PATH": str(WAREHOUSE_TEMPORAIRE)}
     commande = [
         str(EXECUTABLE_DBT),
-        "build",
+        *sous_commande,
         "--project-dir",
         str(DOSSIER_DBT),
         "--profiles-dir",
@@ -56,7 +55,20 @@ def _construire_temporaire() -> None:
     # Commande et arguments fixes, aucune entree exterieure : pas d'injection possible.
     resultat = subprocess.run(commande, cwd=DOSSIER_DBT, env=environnement, check=False)  # noqa: S603
     if resultat.returncode != 0:
-        raise ConstructionError(f"dbt build a echoue (code {resultat.returncode})")
+        raise ConstructionError(
+            f"dbt {' '.join(sous_commande)} a echoue (code {resultat.returncode})"
+        )
+
+
+def _construire_temporaire() -> None:
+    """Build et tests dbt, puis catalogue des types, sur le fichier temporaire.
+
+    Le catalogue (catalog.json) est produit avant le swap : l'API lit ainsi un
+    contexte qui correspond exactement au warehouse mis en place, et `docs
+    generate` n'ouvre jamais en ecriture le fichier que l'API lit.
+    """
+    _lancer_dbt("build")
+    _lancer_dbt("docs", "generate")
 
 
 def _consolider_temporaire() -> None:
