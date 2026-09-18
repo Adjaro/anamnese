@@ -45,7 +45,7 @@ data: ## Telecharge MIMIC-IV demo 2.2 et inventorie les colonnes reelles
 	$(PY) python scripts/download_mimic.py
 
 build: ## Reconstruit le warehouse DuckDB (fichier temporaire + swap atomique)
-	$(PY) python scripts/swap_warehouse.py
+	$(UV) run --group dbt python scripts/swap_warehouse.py
 
 docs: ## Regenere le manifest dbt (contexte du LLM)
 	cd $(DBT_DIR) && $(DBT) docs generate
