@@ -1,0 +1,281 @@
+# Jeu d'evaluation NL2SQL (CLAUDE.md §9, PLAN.md etape 6).
+#
+# Chaque SQL attendu a ete ecrit a la main et verifie sur le warehouse.
+# run_eval.py compare les RESULTATS, pas le texte : colonnes et lignes dans
+# n'importe quel ordre, sauf tag `tri` (ordre des lignes compare).
+# `sql_attendu: null` : question volontairement hors schema ou mal posee ; la
+# seule bonne reponse est le refus du moteur (CANNOT_ANSWER).
+#
+# Tags : comptage, agregation, libelle (jointure code -> libelle), temporel,
+# duree, sous_requete, tri, ambigue, et le domaine (patient, sejour, icu, labo,
+# diagnostic).
+
+# --------------------------------------------------------------------------- #
+# Comptages simples
+# --------------------------------------------------------------------------- #
+- id: q01
+  question: "Combien de patients y a-t-il dans la base ?"
+  sql_attendu: select count(*) from dim_patient
+  tags: [comptage, patient]
+
+- id: q02
+  question: "Combien de séjours hospitaliers ont été enregistrés ?"
+  sql_attendu: select count(*) from fct_admission
+  tags: [comptage, sejour]
+
+- id: q03
+  question: "Combien de patients sont passés au moins une fois en réanimation ?"
+  sql_attendu: select count(distinct subject_id) from fct_icu_stay
+  tags: [comptage, icu]
+
+- id: q04
+  question: "Combien de femmes y a-t-il parmi les patients ?"
+  sql_attendu: select count(*) from dim_patient where sexe = 'F'
+  tags: [comptage, patient]
+
+- id: q05
+  question: "Combien de patients sont morts pendant un séjour à l'hôpital ?"
+  sql_attendu: |
+    select count(distinct subject_id) from fct_admission where est_deces_hospitalier
+  tags: [comptage, sejour]
+
+# --------------------------------------------------------------------------- #
+# Agregations
+# --------------------------------------------------------------------------- #
+- id: q06
+  question: "Quel est l'âge moyen des patients lors de leur première admission ?"
+  sql_attendu: |
+    select round(avg(age_admission_annees), 2) from fct_admission where rang_admission = 1
+  tags: [agregation, patient]
+
+- id: q07
+  question: "Combien y a-t-il de séjours pour chaque type d'admission ?"
+  sql_attendu: |
+    select type_admission, count(*) from fct_admission group by type_admission
+  tags: [agregation, sejour]
+
+- id: q08
+  question: "Combien de séjours hospitaliers par type d'assurance ?"
+  sql_attendu: select assurance, count(*) from fct_admission group by assurance
+  tags: [agregation, sejour]
+
+- id: q09
+  question: "Quelle est la valeur moyenne de l'hémoglobine sanguine, toutes mesures confondues ?"
+  sql_attendu: |
+    select round(avg(valeur_num), 2)
+    from fct_lab_result
+    where analyse_libelle = 'Hemoglobin' and liquide_biologique = 'Blood'
+  tags: [agregation, labo]
+
+- id: q10
+  question: "Combien de patients avaient plus de 65 ans à leur première admission ?"
+  sql_attendu: |
+    select count(distinct subject_id)
+    from fct_admission
+    where rang_admission = 1 and age_admission_annees > 65
+  tags: [agregation, patient]
+
+# --------------------------------------------------------------------------- #
+# Jointures code -> libelle
+# --------------------------------------------------------------------------- #
+- id: q11
+  question: "Quels sont les 5 diagnostics les plus fréquents, tous rangs confondus ?"
+  sql_attendu: |
+    select libelle, count(*) as nb
+    from fct_diagnostic
+    group by libelle
+    order by nb desc
+    limit 5
+  tags: [libelle, diagnostic, tri]
+
+- id: q12
+  question: "Combien de patients ont eu une insuffisance rénale aiguë ?"
+  sql_attendu: |
+    select count(distinct subject_id)
+    from fct_diagnostic
+    where libelle ilike '%acute kidney failure%'
+  tags: [libelle, diagnostic]
+
+- id: q13
+  question: >-
+    Quel est le diagnostic le plus fréquent, tous rangs confondus, pendant les
+    séjours où le patient est mort à l'hôpital ?
+  sql_attendu: |
+    select libelle, count(*) as nb
+    from fct_diagnostic
+    where est_deces_hospitalier
+    group by libelle
+    order by nb desc
+    limit 1
+  tags: [libelle, diagnostic]
+
+- id: q14
+  question: "Quelles sont les 5 analyses de laboratoire les plus souvent réalisées ?"
+  sql_attendu: |
+    select analyse_libelle, count(*) as nb
+    from fct_lab_result
+    group by analyse_libelle
+    order by nb desc
+    limit 5
+  tags: [libelle, labo, tri]
+
+- id: q15
+  question: >-
+    Combien de séjours en réanimation concernent un séjour hospitalier dont le
+    diagnostic principal est une pneumonie ?
+  sql_attendu: |
+    select count(*)
+    from fct_icu_stay as icu
+    inner join fct_admission as admission on icu.hadm_id = admission.hadm_id
+    where admission.diagnostic_principal_libelle ilike '%pneumonia%'
+  tags: [libelle, icu]
+
+# --------------------------------------------------------------------------- #
+# Filtres temporels relatifs (dates decalees : jamais d'annee absolue)
+# --------------------------------------------------------------------------- #
+- id: q16
+  question: >-
+    Combien de résultats d'analyse ont été prélevés entre l'admission à
+    l'hôpital et 24 heures après, bornes comprises ?
+  # Bornes explicites : 26 prelevements tombent exactement a +24 h.
+  sql_attendu: |
+    select count(*)
+    from fct_lab_result as labo
+    inner join fct_admission as admission on labo.hadm_id = admission.hadm_id
+    where labo.prelevement_at
+        between admission.admission_at and admission.admission_at + interval 24 hour
+  tags: [temporel, labo]
+
+- id: q17
+  question: >-
+    Combien de séjours en réanimation ont commencé entre l'admission à
+    l'hôpital et les 24 heures qui ont suivi ?
+  # Exclut les 2 sejours de reanimation commences avant l'admission.
+  sql_attendu: |
+    select count(*) from fct_icu_stay where delai_admission_icu_heures between 0 and 24
+  tags: [temporel, icu]
+
+- id: q18
+  question: "Combien de patients ont été réadmis moins de 7 jours après une sortie d'hôpital ?"
+  sql_attendu: |
+    with sejours as (
+        select
+            subject_id
+            , admission_at
+            , lag(sortie_at) over (partition by subject_id order by admission_at)
+                as sortie_precedente_at
+        from fct_admission
+    )
+    select count(distinct subject_id)
+    from sejours
+    where admission_at < sortie_precedente_at + interval 7 day
+  tags: [temporel, sejour]
+
+- id: q19
+  question: >-
+    Combien de mesures de glucose sanguin ont été faites pendant un séjour en
+    réanimation ?
+  sql_attendu: |
+    select count(*)
+    from fct_lab_result as labo
+    inner join fct_icu_stay as icu
+        on labo.subject_id = icu.subject_id
+        and labo.prelevement_at between icu.entree_icu_at and icu.sortie_icu_at
+    where labo.analyse_libelle = 'Glucose' and labo.liquide_biologique = 'Blood'
+  tags: [temporel, labo, icu]
+
+# --------------------------------------------------------------------------- #
+# Durees
+# --------------------------------------------------------------------------- #
+- id: q20
+  question: "Quelle est la durée médiane d'un séjour hospitalier, en heures ?"
+  sql_attendu: select round(median(duree_sejour_heures), 2) from fct_admission
+  tags: [duree, sejour]
+
+- id: q21
+  question: "Combien de jours a duré le plus long séjour hospitalier ?"
+  sql_attendu: select max(duree_sejour_jours) from fct_admission
+  tags: [duree, sejour]
+
+- id: q22
+  question: >-
+    Quelle est la durée moyenne de séjour hospitalier, en jours, des patients
+    morts à l'hôpital et celle des autres ?
+  # Seules les durees sont comparees : la colonne de regroupement peut etre un
+  # booleen ou un libelle (« decede » / « autres ») sans que la reponse soit fausse.
+  sql_attendu: |
+    select round(avg(duree_sejour_jours), 2)
+    from fct_admission
+    group by est_deces_hospitalier
+  tags: [duree, sejour]
+
+- id: q23
+  question: "Combien de séjours en réanimation ont duré plus de 3 jours ?"
+  sql_attendu: select count(*) from fct_icu_stay where duree_sejour_icu_jours > 3
+  tags: [duree, icu]
+
+# --------------------------------------------------------------------------- #
+# Sous-requetes
+# --------------------------------------------------------------------------- #
+- id: q24
+  question: "Combien de patients ont eu plus d'un séjour en réanimation ?"
+  sql_attendu: |
+    select count(*)
+    from (select subject_id from fct_icu_stay group by subject_id having count(*) > 1)
+  tags: [sous_requete, icu]
+
+- id: q25
+  question: >-
+    Quels patients ont eu plus de séjours hospitaliers que la moyenne ? Donne
+    leurs identifiants.
+  sql_attendu: |
+    select subject_id
+    from dim_patient
+    where nb_sejours > (select avg(nb_sejours) from dim_patient)
+  tags: [sous_requete, patient]
+
+- id: q26
+  question: "Quel pourcentage des séjours hospitaliers comporte un passage en réanimation ?"
+  sql_attendu: |
+    select round(100.0 * count(*) filter (where a_sejour_icu) / count(*), 2)
+    from fct_admission
+  tags: [sous_requete, sejour]
+
+- id: q27
+  question: >-
+    Quel est le potassium sanguin moyen des patients qui sont passés au moins
+    une fois en réanimation ?
+  sql_attendu: |
+    select round(avg(valeur_num), 2)
+    from fct_lab_result
+    where analyse_libelle = 'Potassium'
+      and liquide_biologique = 'Blood'
+      and subject_id in (select subject_id from fct_icu_stay)
+  tags: [sous_requete, labo]
+
+# --------------------------------------------------------------------------- #
+# Tri
+# --------------------------------------------------------------------------- #
+- id: q28
+  question: >-
+    Classe les types d'admission par durée moyenne de séjour, du plus long au
+    plus court, avec la durée moyenne en jours.
+  sql_attendu: |
+    select type_admission, round(avg(duree_sejour_jours), 2) as duree_moyenne
+    from fct_admission
+    group by type_admission
+    order by duree_moyenne desc
+  tags: [tri, duree, sejour]
+
+# --------------------------------------------------------------------------- #
+# Questions volontairement hors schema ou mal posees : refus attendu
+# --------------------------------------------------------------------------- #
+- id: q29
+  question: "Quel médecin a traité le plus de patients ?"
+  sql_attendu: null
+  tags: [ambigue]
+
+- id: q30
+  question: "Combien de patients ont été hospitalisés en janvier 2015 ?"
+  sql_attendu: null
+  tags: [ambigue, temporel]
