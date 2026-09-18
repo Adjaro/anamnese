@@ -1,0 +1,63 @@
+# Exemples few-shot : une question en francais et le SQL attendu, verifie sur le
+# warehouse. Couvrent agregation, jointure de libelle, filtre temporel relatif,
+# calcul de duree et COUNT DISTINCT (PLAN.md, etape 5). Toute modification se
+# rejoue avec `make eval` (CLAUDE.md §9).
+
+- question: "Quelle est la durée moyenne de séjour hospitalier, en jours, par type d'admission ?"
+  sql: |
+    select
+        type_admission
+        , round(avg(duree_sejour_jours), 2) as duree_moyenne_jours
+        , count(*) as nb_sejours
+    from fct_admission
+    group by type_admission
+    order by duree_moyenne_jours desc
+
+- question: >-
+    Quels sont les diagnostics principaux les plus fréquents des séjours passés
+    en réanimation cardiaque ?
+  sql: |
+    select
+        admission.diagnostic_principal_libelle as diagnostic_principal
+        , count(*) as nb_sejours_icu
+    from fct_icu_stay as icu
+    inner join fct_admission as admission
+        on icu.hadm_id = admission.hadm_id
+    where icu.premiere_unite like '%(CVICU)%'
+    group by admission.diagnostic_principal_libelle
+    order by nb_sejours_icu desc
+    limit 5
+
+- question: "Combien de patients ont été réadmis dans les 30 jours suivant une sortie d'hôpital ?"
+  sql: |
+    with sejours as (
+        select
+            subject_id
+            , admission_at
+            , lag(sortie_at) over (partition by subject_id order by admission_at)
+                as sortie_precedente_at
+        from fct_admission
+    )
+
+    select count(distinct subject_id) as nb_patients_readmis_30_jours
+    from sejours
+    where admission_at <= sortie_precedente_at + interval 30 day
+
+- question: "Quelle est la durée médiane de séjour en réanimation, en heures, par unité d'entrée ?"
+  sql: |
+    select
+        premiere_unite as unite
+        , round(median(duree_sejour_icu_heures), 2) as duree_mediane_heures
+        , count(*) as nb_sejours_icu
+    from fct_icu_stay
+    group by premiere_unite
+    order by duree_mediane_heures desc
+
+- question: "Combien de patients ont eu au moins un potassium sanguin anormal ?"
+  sql: |
+    select count(distinct subject_id) as nb_patients
+    from fct_lab_result
+    where
+        analyse_libelle = 'Potassium'
+        and liquide_biologique = 'Blood'
+        and est_anormal
