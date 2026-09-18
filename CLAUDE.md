@@ -154,8 +154,10 @@ est considérée comme un défaut à corriger.
   disque. Jamais de prompt en f-string dans le code : une modification de prompt
   doit apparaître dans un diff git.
 - Les exemples few-shot vivent dans `prompts/examples.yml`.
-- Erreurs : exceptions maison (`SQLValidationError`, `LLMError`) définies dans
-  `engine.py`. Pas de `except Exception: pass`.
+- Erreurs : exceptions maison, définies dans le module qui les lève :
+  `SQLValidationError` dans `guardrails.py`, `LLMError` dans `llm.py`. `engine.py`
+  les importe ; les définir dans `engine.py` créerait un import circulaire, puisque
+  `engine.py` importe ces modules. Pas de `except Exception: pass`.
 - Logs : `structlog` ou `logging` en JSON. On journalise systématiquement la
   question, le SQL généré, le verdict de validation et la durée. Jamais les
   lignes de résultat.
