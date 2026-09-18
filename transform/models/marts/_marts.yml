@@ -1,0 +1,535 @@
+# Marts : seul niveau expose au LLM (CLAUDE.md §5). Les descriptions sont ecrites
+# pour une machine qui doit ecrire du SQL sans voir les donnees : granularite,
+# unite, valeurs possibles, referentiel des codes, signification d'un NULL.
+# Les enumerations sont celles reellement presentes dans MIMIC-IV demo 2.2 et sont
+# verrouillees par des tests accepted_values : une description fausse casse le build.
+version: 2
+
+models:
+  # ------------------------------------------------------------------------- #
+  - name: dim_patient
+    description: >-
+      Une ligne par patient (100 patients). Donnees demographiques et resume de
+      son parcours. Toutes les dates de MIMIC sont decalees par la
+      desidentification (annees 2110 a 2202) : seules les durees et les ecarts
+      entre dates d'un meme patient ont un sens, jamais une annee ou une date
+      calendaire absolue.
+    columns:
+      - name: subject_id
+        description: >-
+          Identifiant MIMIC du patient. Cle primaire. Cle de jointure avec
+          fct_admission, fct_icu_stay et fct_lab_result.
+        data_tests: [unique, not_null]
+      - name: sexe
+        description: "Sexe administratif du patient : 'M' (masculin) ou 'F' (feminin)."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["M", "F"]
+      - name: age_ancrage_annees
+        description: >-
+          Age du patient en annees pendant son annee d'ancrage (annee_ancrage),
+          entier de 21 a 91 dans la demo. 91 signifie « 89 ans ou plus » (plafond
+          de desidentification, 3 patients). Pour l'age a une admission, utiliser
+          fct_admission.age_admission_annees.
+        data_tests: [not_null]
+      - name: annee_ancrage
+        description: >-
+          Annee decalee (2110 a 2202) a laquelle le patient avait
+          age_ancrage_annees. Sert uniquement a calculer un age :
+          age_ancrage_annees + annee(date) - annee_ancrage. Ne represente aucune
+          annee reelle.
+        data_tests: [not_null]
+      - name: periode_reelle_ancrage
+        description: >-
+          Seule information de calendrier reel : periode de trois ans pendant
+          laquelle se situe l'annee d'ancrage. Valeurs : '2011 - 2013',
+          '2014 - 2016'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["2011 - 2013", "2014 - 2016"]
+      - name: deces_date
+        description: >-
+          Date de deces (decalee), a l'hopital ou hors de l'hopital (etat civil,
+          jusqu'a un an apres la derniere sortie). NULL si aucun deces n'est
+          connu, ce qui ne prouve pas que le patient est vivant.
+      - name: est_decede
+        description: >-
+          Vrai si une date de deces est connue (deces_date non NULL), a l'hopital
+          ou apres. Pour un deces pendant un sejour, utiliser
+          fct_admission.est_deces_hospitalier.
+        data_tests: [not_null]
+      - name: premiere_admission_at
+        description: >-
+          Horodatage (decale) de la premiere admission hospitaliere du patient.
+          Jamais NULL : chaque patient de la demo a au moins un sejour.
+      - name: derniere_sortie_at
+        description: Horodatage (decale) de la derniere sortie hospitaliere du patient.
+      - name: nb_sejours
+        description: >-
+          Nombre de sejours hospitaliers du patient (lignes de fct_admission),
+          entier >= 1.
+        data_tests: [not_null]
+      - name: nb_sejours_icu
+        description: >-
+          Nombre de sejours en reanimation du patient (lignes de fct_icu_stay),
+          entier >= 0. 0 si le patient n'est jamais passe en reanimation.
+        data_tests: [not_null]
+
+  # ------------------------------------------------------------------------- #
+  - name: fct_admission
+    description: >-
+      Une ligne par sejour hospitalier (hadm_id), de l'admission a la sortie.
+      Porte la duree, le type d'admission, la provenance, la destination de
+      sortie, le deces hospitalier et le diagnostic principal. Dates decalees
+      par la desidentification (annees 2110 a 2202) : utiliser les durees et
+      les ecarts, jamais une annee ou une date calendaire absolue.
+    columns:
+      - name: hadm_id
+        description: >-
+          Identifiant MIMIC du sejour hospitalier. Cle primaire. Cle de jointure
+          avec fct_icu_stay et fct_lab_result.
+        data_tests: [unique, not_null]
+      - name: subject_id
+        description: Identifiant du patient. Cle etrangere vers dim_patient.subject_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_patient')
+                field: subject_id
+      - name: sexe
+        description: "Sexe du patient, copie de dim_patient : 'M' ou 'F'."
+        data_tests: [not_null]
+      - name: age_admission_annees
+        description: >-
+          Age du patient a l'admission, en annees entieres, calcule par
+          age_ancrage + annee(admission) - annee_ancrage. Superieur ou egal a 89
+          pour les patients dont l'age d'ancrage est plafonne a 91 : la valeur
+          exacte n'est alors pas fiable.
+        data_tests: [not_null]
+      - name: rang_admission
+        description: >-
+          Rang chronologique de ce sejour parmi ceux du patient : 1 pour la
+          premiere admission, 2 pour la suivante, etc. rang_admission > 1
+          signifie une readmission.
+        data_tests: [not_null]
+      - name: admission_at
+        description: Horodatage (decale) de l'admission a l'hopital.
+        data_tests: [not_null]
+      - name: sortie_at
+        description: >-
+          Horodatage (decale) de la sortie de l'hopital, ou du deces si le
+          patient est mort pendant le sejour. Toujours posterieur a admission_at.
+        data_tests: [not_null]
+      - name: deces_at
+        description: >-
+          Horodatage (decale) du deces a l'hopital. NULL si le patient n'est pas
+          mort pendant ce sejour (cas de 260 sejours sur 275).
+      - name: urgences_entree_at
+        description: >-
+          Horodatage (decale) d'enregistrement aux urgences avant l'admission.
+          NULL si le patient n'est pas passe par les urgences.
+      - name: urgences_sortie_at
+        description: >-
+          Horodatage (decale) de sortie des urgences. NULL si le patient n'est
+          pas passe par les urgences.
+      - name: duree_sejour_heures
+        description: >-
+          Duree du sejour hospitalier en heures (decimal, 2 decimales), de
+          admission_at a sortie_at. Jamais NULL.
+        data_tests: [not_null]
+      - name: duree_sejour_jours
+        description: >-
+          Duree du sejour hospitalier en jours (decimal, 2 decimales) :
+          duree_sejour_heures / 24. Jamais NULL.
+        data_tests: [not_null]
+      - name: type_admission
+        description: >-
+          Type d'admission, en anglais, valeurs exactes : 'EW EMER.' (urgence),
+          'DIRECT EMER.' (urgence directe), 'URGENT', 'ELECTIVE' (programmee),
+          'SURGICAL SAME DAY ADMISSION' (chirurgie le jour meme),
+          'OBSERVATION ADMIT', 'EU OBSERVATION', 'DIRECT OBSERVATION',
+          'AMBULATORY OBSERVATION' (les quatre derniers : observation).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - EW EMER.
+                  - DIRECT EMER.
+                  - URGENT
+                  - ELECTIVE
+                  - SURGICAL SAME DAY ADMISSION
+                  - OBSERVATION ADMIT
+                  - EU OBSERVATION
+                  - DIRECT OBSERVATION
+                  - AMBULATORY OBSERVATION
+      - name: provenance
+        description: >-
+          Lieu d'ou vient le patient a l'admission, en anglais, valeurs exactes :
+          'EMERGENCY ROOM' (urgences), 'PHYSICIAN REFERRAL' (adresse par un
+          medecin), 'TRANSFER FROM HOSPITAL' (transfert d'un autre hopital),
+          'CLINIC REFERRAL', 'PROCEDURE SITE', 'WALK-IN/SELF REFERRAL', 'PACU'
+          (salle de reveil), 'TRANSFER FROM SKILLED NURSING FACILITY',
+          'INTERNAL TRANSFER TO OR FROM PSYCH', 'INFORMATION NOT AVAILABLE'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - EMERGENCY ROOM
+                  - PHYSICIAN REFERRAL
+                  - TRANSFER FROM HOSPITAL
+                  - CLINIC REFERRAL
+                  - PROCEDURE SITE
+                  - WALK-IN/SELF REFERRAL
+                  - PACU
+                  - TRANSFER FROM SKILLED NURSING FACILITY
+                  - INTERNAL TRANSFER TO OR FROM PSYCH
+                  - INFORMATION NOT AVAILABLE
+      - name: destination_sortie
+        description: >-
+          Destination du patient a la sortie, en anglais, valeurs exactes :
+          'HOME' (domicile), 'HOME HEALTH CARE' (domicile avec soins),
+          'SKILLED NURSING FACILITY', 'REHAB' (reeducation),
+          'CHRONIC/LONG TERM ACUTE CARE', 'HOSPICE' (soins palliatifs),
+          'AGAINST ADVICE' (sortie contre avis medical), 'PSYCH FACILITY',
+          'ACUTE HOSPITAL' (transfert), 'DIED' (deces). NULL si non renseignee
+          (42 sejours). Pour le deces, preferer est_deces_hospitalier.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values:
+                  - HOME
+                  - HOME HEALTH CARE
+                  - SKILLED NURSING FACILITY
+                  - REHAB
+                  - CHRONIC/LONG TERM ACUTE CARE
+                  - HOSPICE
+                  - AGAINST ADVICE
+                  - PSYCH FACILITY
+                  - ACUTE HOSPITAL
+                  - DIED
+      - name: assurance
+        description: "Couverture sociale du patient : 'Medicare', 'Medicaid' ou 'Other'."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Medicare", "Medicaid", "Other"]
+      - name: langue
+        description: "Langue du patient : 'ENGLISH', ou '?' si inconnue. Jamais NULL."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["ENGLISH", "?"]
+      - name: statut_marital
+        description: >-
+          Statut marital a l'admission : 'SINGLE', 'MARRIED', 'WIDOWED',
+          'DIVORCED'. NULL si non renseigne.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["SINGLE", "MARRIED", "WIDOWED", "DIVORCED"]
+      - name: origine_ethnique
+        description: >-
+          Origine ethnique declaree, en anglais, valeurs exactes : 'WHITE',
+          'WHITE - BRAZILIAN', 'WHITE - OTHER EUROPEAN', 'PORTUGUESE',
+          'BLACK/AFRICAN AMERICAN', 'BLACK/CAPE VERDEAN', 'HISPANIC OR LATINO',
+          'HISPANIC/LATINO - CUBAN', 'HISPANIC/LATINO - SALVADORAN',
+          'HISPANIC/LATINO - PUERTO RICAN', 'OTHER', 'UNKNOWN',
+          'UNABLE TO OBTAIN', 'PATIENT DECLINED TO ANSWER'. Pour regrouper, filtrer
+          par prefixe : like 'WHITE%', like 'BLACK%', like 'HISPANIC%'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - WHITE
+                  - WHITE - BRAZILIAN
+                  - WHITE - OTHER EUROPEAN
+                  - PORTUGUESE
+                  - BLACK/AFRICAN AMERICAN
+                  - BLACK/CAPE VERDEAN
+                  - HISPANIC OR LATINO
+                  - HISPANIC/LATINO - CUBAN
+                  - HISPANIC/LATINO - SALVADORAN
+                  - HISPANIC/LATINO - PUERTO RICAN
+                  - OTHER
+                  - UNKNOWN
+                  - UNABLE TO OBTAIN
+                  - PATIENT DECLINED TO ANSWER
+      - name: est_deces_hospitalier
+        description: >-
+          Vrai si le patient est mort pendant ce sejour hospitalier (15 sejours
+          sur 275). Critere de reference pour la mortalite hospitaliere.
+        data_tests: [not_null]
+      - name: diagnostic_principal_code
+        description: >-
+          Code du diagnostic principal du sejour (rang 1 dans la liste des
+          diagnostics), sans point : '41401' en CIM-9, 'I2510' en CIM-10. Le
+          referentiel depend de diagnostic_principal_version_cim : un meme code
+          peut exister dans les deux versions avec des sens differents. Pour
+          chercher une maladie, filtrer plutot sur diagnostic_principal_libelle.
+        data_tests: [not_null]
+      - name: diagnostic_principal_version_cim
+        description: >-
+          Version de la classification du diagnostic principal : 9 (CIM-9-CM,
+          ICD-9) ou 10 (CIM-10-CM, ICD-10).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [9, 10]
+                quote: false
+      - name: diagnostic_principal_libelle
+        description: >-
+          Libelle officiel du diagnostic principal, en anglais, texte libre (ex.
+          'Coronary atherosclerosis of native coronary artery'). Rechercher avec
+          ilike '%mot%' en anglais (ex. '%sepsis%', '%pneumonia%', '%heart
+          failure%').
+        data_tests: [not_null]
+      - name: nb_diagnostics
+        description: >-
+          Nombre total de diagnostics codes pour le sejour, principal inclus,
+          entier >= 1.
+        data_tests: [not_null]
+      - name: nb_sejours_icu
+        description: >-
+          Nombre de sejours en reanimation pendant ce sejour hospitalier, entier
+          >= 0. 0 si le patient n'est pas passe en reanimation.
+        data_tests: [not_null]
+      - name: a_sejour_icu
+        description: Vrai si le sejour comporte au moins un passage en reanimation.
+        data_tests: [not_null]
+
+  # ------------------------------------------------------------------------- #
+  - name: fct_icu_stay
+    description: >-
+      Une ligne par sejour en reanimation (stay_id). Un sejour hospitalier
+      (hadm_id) peut contenir zero, un ou plusieurs sejours en reanimation. Dates
+      decalees par la desidentification (annees 2110 a 2202) : utiliser les
+      durees et les ecarts, jamais une annee ou une date calendaire absolue.
+    columns:
+      - name: stay_id
+        description: Identifiant MIMIC du sejour en reanimation. Cle primaire.
+        data_tests: [unique, not_null]
+      - name: hadm_id
+        description: >-
+          Sejour hospitalier qui contient ce sejour en reanimation. Cle etrangere
+          vers fct_admission.hadm_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_admission')
+                field: hadm_id
+      - name: subject_id
+        description: Identifiant du patient. Cle etrangere vers dim_patient.subject_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_patient')
+                field: subject_id
+      - name: sexe
+        description: "Sexe du patient, copie de dim_patient : 'M' ou 'F'."
+        data_tests: [not_null]
+      - name: age_admission_annees
+        description: >-
+          Age du patient a l'admission hospitaliere contenant ce sejour, en
+          annees entieres. Meme calcul et meme plafond que
+          fct_admission.age_admission_annees.
+        data_tests: [not_null]
+      - name: premiere_unite
+        description: &unites_icu >-
+          Unite de reanimation, libelle exact en anglais : 'Medical Intensive
+          Care Unit (MICU)', 'Surgical Intensive Care Unit (SICU)',
+          'Medical/Surgical Intensive Care Unit (MICU/SICU)', 'Cardiac Vascular
+          Intensive Care Unit (CVICU)', 'Coronary Care Unit (CCU)', 'Trauma SICU
+          (TSICU)', 'Neuro Surgical Intensive Care Unit (Neuro SICU)', 'Neuro
+          Stepdown', 'Neuro Intermediate'. Filtrer sur le sigle avec like, ex.
+          like '%(MICU)%'. Ici : unite d'entree du sejour.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: &valeurs_unites_icu
+                  - Medical Intensive Care Unit (MICU)
+                  - Surgical Intensive Care Unit (SICU)
+                  - Medical/Surgical Intensive Care Unit (MICU/SICU)
+                  - Cardiac Vascular Intensive Care Unit (CVICU)
+                  - Coronary Care Unit (CCU)
+                  - Trauma SICU (TSICU)
+                  - Neuro Surgical Intensive Care Unit (Neuro SICU)
+                  - Neuro Stepdown
+                  - Neuro Intermediate
+      - name: derniere_unite
+        description: >-
+          Unite de reanimation de sortie du sejour, memes valeurs que
+          premiere_unite. Egale a premiere_unite si le patient n'a pas change
+          d'unite.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: *valeurs_unites_icu
+      - name: a_change_unite
+        description: Vrai si premiere_unite et derniere_unite different.
+        data_tests: [not_null]
+      - name: entree_icu_at
+        description: Horodatage (decale) d'entree en reanimation.
+        data_tests: [not_null]
+      - name: sortie_icu_at
+        description: Horodatage (decale) de sortie de reanimation. Jamais NULL.
+        data_tests: [not_null]
+      - name: duree_sejour_icu_heures
+        description: >-
+          Duree du sejour en reanimation en heures (decimal, 2 decimales), de
+          entree_icu_at a sortie_icu_at.
+        data_tests: [not_null]
+      - name: duree_sejour_icu_jours
+        description: >-
+          Duree du sejour en reanimation en jours (decimal, 2 decimales), de 0,02
+          a 20,53 jours dans la demo. Egale a duree_sejour_icu_heures / 24.
+        data_tests: [not_null]
+      - name: delai_admission_icu_heures
+        description: >-
+          Heures ecoulees entre l'admission a l'hopital et l'entree en
+          reanimation (decimal, 2 decimales). Peut etre negatif : l'entree en
+          reanimation precede parfois l'enregistrement de l'admission (2 cas).
+        data_tests: [not_null]
+      - name: est_deces_hospitalier
+        description: >-
+          Vrai si le patient est mort pendant le sejour hospitalier qui contient
+          ce sejour en reanimation, en reanimation ou apres en etre sorti. Copie
+          de fct_admission.est_deces_hospitalier.
+        data_tests: [not_null]
+
+  # ------------------------------------------------------------------------- #
+  - name: fct_lab_result
+    description: >-
+      Une ligne par resultat d'analyse de laboratoire (labevent_id), pendant un
+      sejour hospitalier ou en ambulatoire. Pour tout calcul numerique (moyenne,
+      seuil, comparaison), utiliser valeur_num, jamais valeur_texte. Dates
+      decalees par la desidentification (annees 2110 a 2202).
+    columns:
+      - name: labevent_id
+        description: Identifiant MIMIC du resultat. Cle primaire.
+        data_tests: [unique, not_null]
+      - name: subject_id
+        description: Identifiant du patient. Cle etrangere vers dim_patient.subject_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_patient')
+                field: subject_id
+      - name: hadm_id
+        description: >-
+          Sejour hospitalier pendant lequel l'analyse a ete faite. Cle etrangere
+          vers fct_admission.hadm_id. NULL si l'analyse a ete faite en
+          ambulatoire, hors sejour (environ 26 % des resultats) : une jointure
+          interne avec fct_admission les exclut.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_admission')
+                field: hadm_id
+      - name: specimen_id
+        description: >-
+          Identifiant de l'echantillon preleve. Plusieurs resultats partagent le
+          meme specimen_id quand ils viennent du meme prelevement.
+        data_tests: [not_null]
+      - name: itemid
+        description: >-
+          Identifiant MIMIC de l'analyse (referentiel d_labitems). Plusieurs
+          itemid peuvent porter le meme analyse_libelle dans des liquides
+          differents : filtrer sur analyse_libelle et liquide_biologique.
+        data_tests: [not_null]
+      - name: analyse_libelle
+        description: >-
+          Nom de l'analyse, en anglais, texte libre avec la casse d'origine (ex.
+          'Glucose', 'Creatinine', 'Hemoglobin', 'Potassium', 'Sodium', 'White
+          Blood Cells'). Rechercher avec ilike. Jamais NULL dans les resultats.
+        data_tests: [not_null]
+      - name: liquide_biologique
+        description: >-
+          Liquide analyse, valeurs exactes : 'Blood' (sang), 'Urine', 'Other Body
+          Fluid', 'Cerebrospinal Fluid' (LCR), 'Joint Fluid', 'Pleural',
+          'Ascites', 'Bone Marrow', 'Stool', 'Fluid', et les codes 'Q' et 'I'
+          sans signification documentee.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Blood
+                  - Urine
+                  - Other Body Fluid
+                  - Cerebrospinal Fluid
+                  - Joint Fluid
+                  - Pleural
+                  - Ascites
+                  - Bone Marrow
+                  - Stool
+                  - Fluid
+                  - Q
+                  - I
+      - name: categorie_analyse
+        description: >-
+          Categorie de l'analyse : 'Chemistry', 'Hematology' ou 'Blood Gas'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["Chemistry", "Hematology", "Blood Gas"]
+      - name: prelevement_at
+        description: >-
+          Horodatage (decale) du prelevement, moment de reference du resultat.
+        data_tests: [not_null]
+      - name: valeur_texte
+        description: >-
+          Resultat tel que saisi, TEXTE : nombres ('7.4'), resultats qualitatifs
+          ('NEG', 'NONE'), mentions du laboratoire ('ART.', 'HOLD.'), bornes
+          ('<1') ou '___' (valeur masquee par la desidentification, 6 823
+          lignes). Ne jamais caster ni comparer numeriquement : utiliser
+          valeur_num. NULL si aucun resultat saisi.
+      - name: valeur_num
+        description: >-
+          Resultat numerique, dans l'unite de la colonne unite. NULL quand le
+          resultat n'est pas numerique (qualitatif, borne, masque ou absent,
+          environ 12 % des lignes) : exclure ces lignes des moyennes et seuils.
+      - name: unite
+        description: >-
+          Unite de valeur_num et des bornes normales, texte libre (ex. 'mg/dL',
+          'mEq/L', 'K/uL', 'g/dL', '%'). NULL si le resultat n'a pas d'unite.
+          Une meme analyse peut avoir plusieurs unites : ne comparer ou moyenner
+          que des resultats de meme unite.
+      - name: borne_normale_basse_num
+        description: >-
+          Borne basse de la plage normale, dans l'unite de la colonne unite.
+          NULL si aucune plage n'est definie pour ce resultat.
+      - name: borne_normale_haute_num
+        description: >-
+          Borne haute de la plage normale, dans l'unite de la colonne unite.
+          NULL si aucune plage n'est definie pour ce resultat.
+      - name: est_anormal
+        description: >-
+          Vrai si le laboratoire a marque le resultat comme anormal, qu'une plage
+          normale soit definie ou non (1 305 resultats anormaux sans plage). Faux
+          sinon. Jamais NULL.
+        data_tests: [not_null]
+      - name: priorite
+        description: >-
+          Priorite de la demande : 'STAT' (urgente) ou 'ROUTINE'. NULL si non
+          renseignee (environ 9 % des lignes).
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["STAT", "ROUTINE"]

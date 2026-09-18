@@ -1,0 +1,15 @@
+# Couche intermediate : jointures code -> libelle, ephemeres, jamais exposees au LLM.
+# Noms de colonnes d'origine conserves ; le renommage a lieu une seule fois, en mart.
+version: 2
+
+models:
+  - name: int_diagnoses_labelled
+    description: >-
+      Une ligne par diagnostic d'un sejour hospitalier (hadm_id, seq_num), avec son
+      libelle. Jointure sur (icd_code, icd_version) : 493 codes existent a la fois
+      en CIM-9 et en CIM-10, une jointure sur icd_code seul dupliquerait des lignes.
+
+  - name: int_lab_results_labelled
+    description: >-
+      Une ligne par resultat d'analyse de laboratoire (labevent_id), avec le
+      libelle, le liquide biologique et la categorie de l'analyse.
