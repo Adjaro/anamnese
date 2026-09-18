@@ -134,7 +134,7 @@ repos:
       - id: pytest
         name: pytest (hors LLM et warehouse)
         language: system
-        entry: uv run pytest -q -m "not needs_llm and not needs_warehouse"
+        entry: uv run pytest -q -m "not needs_llm"
         pass_filenames: false
         always_run: true
         stages: [pre-push]

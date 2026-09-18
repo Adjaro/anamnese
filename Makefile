@@ -61,8 +61,8 @@ fmt: ## Reformate le code
 	$(PY) ruff check --fix .
 	$(PY) ruff format .
 
-test: ## Tests unitaires (hors LLM et hors warehouse)
-	$(PY) pytest -m "not needs_llm and not needs_warehouse"
+test: ## Tests (hors LLM) ; ceux du warehouse s'ignorent s'il n'est pas construit
+	$(PY) pytest -m "not needs_llm"
 
 check: lint test ## Porte de sortie locale : ce que la CI verifiera
 
