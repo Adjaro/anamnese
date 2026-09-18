@@ -309,6 +309,96 @@ models:
         data_tests: [not_null]
 
   # ------------------------------------------------------------------------- #
+  - name: fct_diagnostic
+    description: >-
+      Une ligne par diagnostic code d'un sejour hospitalier, identifiee par
+      (hadm_id, rang_diagnostic) : tous les diagnostics, pas seulement le
+      principal (4 506 lignes, 275 sejours, 1 a 39 diagnostics par sejour).
+      Pour compter des patients atteints d'une maladie, utiliser
+      count(distinct subject_id) : un patient peut porter le meme diagnostic
+      sur plusieurs sejours. Une meme maladie a des codes et des libelles
+      differents en CIM-9 et en CIM-10 (ex. hypertension : 'Unspecified
+      essential hypertension' en CIM-9, 'Essential (primary) hypertension' en
+      CIM-10) : chercher par mot-cle dans libelle, ou couvrir les deux versions.
+    data_tests:
+      - unique:
+          column_name: "hadm_id || '-' || rang_diagnostic"
+    columns:
+      - name: hadm_id
+        description: >-
+          Sejour hospitalier du diagnostic. Cle etrangere vers
+          fct_admission.hadm_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_admission')
+                field: hadm_id
+      - name: rang_diagnostic
+        description: >-
+          Rang du diagnostic dans la liste du sejour, entier de 1 a 39. 1 =
+          diagnostic principal ; les suivants sont des diagnostics associes, par
+          ordre d'importance decroissante.
+        data_tests: [not_null]
+      - name: subject_id
+        description: Identifiant du patient. Cle etrangere vers dim_patient.subject_id.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_patient')
+                field: subject_id
+      - name: sexe
+        description: "Sexe du patient, copie de dim_patient : 'M' ou 'F'."
+        data_tests: [not_null]
+      - name: age_admission_annees
+        description: >-
+          Age du patient a l'admission du sejour, en annees entieres. Copie de
+          fct_admission.age_admission_annees, meme plafond.
+        data_tests: [not_null]
+      - name: est_diagnostic_principal
+        description: >-
+          Vrai si rang_diagnostic = 1. Le diagnostic principal est aussi porte
+          par fct_admission.diagnostic_principal_*.
+        data_tests: [not_null]
+      - name: code_cim
+        description: >-
+          Code du diagnostic, sans point : '4019' ou '25000' en CIM-9, 'I10' ou
+          'E119' en CIM-10. Referentiel donne par version_cim : un meme code peut
+          exister dans les deux versions avec des sens differents.
+        data_tests: [not_null]
+      - name: version_cim
+        description: >-
+          Version de la classification : 9 (CIM-9-CM, ICD-9, 2 193 lignes) ou 10
+          (CIM-10-CM, ICD-10, 2 313 lignes).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [9, 10]
+                quote: false
+      - name: categorie_cim
+        description: >-
+          Categorie du code, pour regrouper des codes voisins : 3 premiers
+          caracteres de code_cim ('250' = diabete en CIM-9, 'E11' = diabete de
+          type 2 en CIM-10), 4 pour les codes CIM-9 commencant par 'E' (causes
+          externes, ex. 'E849'). Toujours filtrer avec version_cim. Plage de
+          categories : categorie_cim between 'E10' and 'E14' and version_cim = 10.
+        data_tests: [not_null]
+      - name: libelle
+        description: >-
+          Libelle officiel du diagnostic, en anglais, texte libre (ex.
+          'Unspecified essential hypertension', 'Acute kidney failure,
+          unspecified', 'Hypothyroidism, unspecified'). Rechercher avec
+          ilike '%mot%' en anglais (ex. '%diabetes%', '%hypertension%').
+        data_tests: [not_null]
+      - name: est_deces_hospitalier
+        description: >-
+          Vrai si le patient est mort pendant le sejour de ce diagnostic. Copie
+          de fct_admission.est_deces_hospitalier.
+        data_tests: [not_null]
+
+  # ------------------------------------------------------------------------- #
   - name: fct_icu_stay
     description: >-
       Une ligne par sejour en reanimation (stay_id). Un sejour hospitalier
