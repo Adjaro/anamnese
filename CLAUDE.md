@@ -102,7 +102,8 @@ anamnese/
 │   └── prompts/{system.md,examples.yml}
 ├── eval/{questions.yml,run_eval.py}
 ├── app/streamlit_app.py
-└── tests/{test_conventions.py,test_guardrails.py,test_catalog.py}
+├── docs/captures/           # captures d'ecran du README
+└── tests/{test_conventions.py,test_guardrails.py,test_catalog.py,test_engine.py,test_api.py}
 ```
 
 `data/` est gitignoré en entier — pas de `.gitkeep`, les scripts créent les
