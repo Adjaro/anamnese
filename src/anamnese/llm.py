@@ -20,6 +20,9 @@ from mistralai.client.utils import BackoffStrategy, RetryConfig
 
 TIMEOUT_MS = 30_000
 TEMPERATURE = 0.0
+# La temperature 0 ne suffit pas : sans graine, codestral a donne deux SQL
+# differents pour la meme question d'une evaluation a l'autre.
+GRAINE = 0
 
 # 429 et 5xx sont souvent passagers (limite de debit du compte) : le SDK
 # reessaie avec un delai croissant, ou celui impose par l'en-tete Retry-After,
@@ -79,6 +82,7 @@ class ClientMistral:
                     {"role": message.role, "content": message.contenu} for message in messages
                 ],
                 temperature=TEMPERATURE,
+                random_seed=GRAINE,
             )
         except (MistralError, NoResponseError, httpx.HTTPError) as erreur:
             raise LLMError(
