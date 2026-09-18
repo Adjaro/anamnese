@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     query_timeout_seconds: float = Field(
         default=10.0, gt=0, validation_alias="ANAMNESE_QUERY_TIMEOUT_SECONDS"
     )
+    api_url: str = Field(default="http://localhost:8000", validation_alias="ANAMNESE_API_URL")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", validation_alias="ANAMNESE_LOG_LEVEL"
     )
